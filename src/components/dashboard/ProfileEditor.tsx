@@ -96,6 +96,7 @@ import {
   themeOf,
 } from "@/lib/profile";
 import { ConversionCoach } from "@/components/dashboard/ConversionCoach";
+import { DesignTabEditor } from "@/components/dashboard/DesignTabEditor";
 import {
   Accordion,
   AccordionContent,

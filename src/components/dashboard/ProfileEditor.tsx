@@ -134,6 +134,14 @@ import { BlueskyWizard } from "@/components/dashboard/BlueskyWizard";
 import { BookingBlockSettings } from "@/components/dashboard/BookingBlockSettings";
 import { GalleryBlockSettings } from "@/components/dashboard/GalleryBlockSettings";
 import { MediaEmbedBlockSettings } from "@/components/dashboard/MediaEmbedBlockSettings";
+import { ContactFormBlockSettings } from "@/components/dashboard/ContactFormBlockSettings";
+import { EventListBlockSettings } from "@/components/dashboard/EventListBlockSettings";
+import {
+  FaqBlockSettings,
+  MapBlockSettings,
+  PollBlockSettings,
+} from "@/components/dashboard/InteractionBlockSettings";
+
 import { SocialHandleInput } from "@/components/SocialHandleInput";
 import { isHandleBlock } from "@/lib/social-handles";
 
@@ -926,6 +934,37 @@ export function ProfileEditor() {
                                 onChange={(value) => patch(b.id, { value })}
                                 onTitle={(label) => patch(b.id, { label })}
                               />
+                            ) : b.kind === "contact_form" ? (
+                              <ContactFormBlockSettings
+                                value={b.value}
+                                onChange={(value) => patch(b.id, { value })}
+                                onTitle={(label) => patch(b.id, { label })}
+                              />
+                            ) : b.kind === "event_list" ? (
+                              <EventListBlockSettings
+                                value={b.value}
+                                onChange={(value) => patch(b.id, { value })}
+                                onTitle={(label) => patch(b.id, { label })}
+                              />
+                            ) : b.kind === "live_poll" ? (
+                              <PollBlockSettings
+                                value={b.value}
+                                onChange={(value) => patch(b.id, { value })}
+                                onTitle={(label) => patch(b.id, { label })}
+                              />
+                            ) : b.kind === "faq_accordion" ? (
+                              <FaqBlockSettings
+                                value={b.value}
+                                onChange={(value) => patch(b.id, { value })}
+                                onTitle={(label) => patch(b.id, { label })}
+                              />
+                            ) : b.kind === "map_embed" ? (
+                              <MapBlockSettings
+                                value={b.value}
+                                onChange={(value) => patch(b.id, { value })}
+                                onTitle={(label) => patch(b.id, { label })}
+                              />
+
                             ) : isHandleBlock(b.kind) && b.kind !== "matrix" ? (
                               <>
                                 <SocialHandleInput

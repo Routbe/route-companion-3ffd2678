@@ -11,6 +11,15 @@ import { BookingCard } from "@/components/profile/BookingCard";
 import { parseBookingConfig } from "@/lib/booking";
 import { GalleryCard } from "@/components/profile/GalleryCard";
 import { MediaEmbedCard } from "@/components/profile/MediaEmbedCard";
+import { ContactFormCard } from "@/components/profile/ContactFormCard";
+import { EventListCard } from "@/components/profile/EventListCard";
+import { PollCard } from "@/components/profile/PollCard";
+import { FaqCard } from "@/components/profile/FaqCard";
+import { MapCard } from "@/components/profile/MapCard";
+import { parseContactFormConfig } from "@/lib/contact-form";
+import { parseEventListConfig } from "@/lib/events";
+import { parseFaqConfig, parseMapConfig, parsePollConfig } from "@/lib/interactions";
+
 import { parseGalleryConfig } from "@/lib/gallery";
 import { SocialPlatformIcon } from "@/lib/social-icons";
 import { PLATFORM_LABEL, formatFollowers } from "@/lib/social-verify";
@@ -379,6 +388,31 @@ export function ProfileView({
                 />
               ) : b.kind === "media_embed" ? (
                 <MediaEmbedCard key={b.id} value={b.value} style={buttonStyle} />
+              ) : b.kind === "contact_form" ? (
+                <ContactFormCard
+                  key={b.id}
+                  handle={profile.username ?? ""}
+                  config={parseContactFormConfig(b.value)}
+                  style={buttonStyle}
+                />
+              ) : b.kind === "event_list" ? (
+                <EventListCard
+                  key={b.id}
+                  config={parseEventListConfig(b.value)}
+                  style={buttonStyle}
+                />
+              ) : b.kind === "live_poll" ? (
+                <PollCard
+                  key={b.id}
+                  pollKey={`${profile.username ?? "anon"}:${b.id}`}
+                  config={parsePollConfig(b.value)}
+                  style={buttonStyle}
+                />
+              ) : b.kind === "faq_accordion" ? (
+                <FaqCard key={b.id} config={parseFaqConfig(b.value)} style={buttonStyle} />
+              ) : b.kind === "map_embed" ? (
+                <MapCard key={b.id} config={parseMapConfig(b.value)} style={buttonStyle} />
+
               ) : b.kind === "booking_request" ? (
                 <BookingCard
                   key={b.id}

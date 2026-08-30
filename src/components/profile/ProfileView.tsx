@@ -41,6 +41,10 @@ import {
   bioForLocale,
   BIO_LOCALE_LABEL,
   type BioLocale,
+  designButtonStyle,
+  fontPairingOf,
+  wallpaperOverlayStyle,
+  wallpaperStyle,
 } from "@/lib/profile-display";
 import { runVisitEffect } from "@/lib/visit-effects";
 import { AvatarFrameWrapper } from "@/components/profile/AvatarFrameWrapper";
@@ -83,7 +87,8 @@ export function ProfileView({
         b.kind === "booking_request" ||
         b.kind === "spacer"),
   );
-  const buttonStyle = blockButtonStyle(profile.card_style, t);
+  const fonts = fontPairingOf(prefs.fontPairing);
+  const buttonStyle = designButtonStyle(prefs, t) ?? blockButtonStyle(profile.card_style, t);
   /** Eigen canvas- en patroonkleuren overschrijven het thema, indien gekozen. */
   const canvas = {
     ...t,
@@ -91,7 +96,8 @@ export function ProfileView({
     border: prefs.patternColor ?? t.border,
     accent: prefs.patternColor ?? t.accent,
   };
-  const surface = backgroundLayers(prefs.backgroundStyle, canvas);
+  const surface = wallpaperStyle(prefs, canvas) ?? backgroundLayers(prefs.backgroundStyle, canvas);
+  const overlay = wallpaperOverlayStyle(prefs);
   const banner = bannerStyleOf(prefs, t);
   const nameStyle = nameAccentStyle(prefs.nameAccent, t);
 
@@ -101,7 +107,9 @@ export function ProfileView({
   // aan een geverifieerd, menselijk account gekoppeld is — zonder echte naam.
   const showBadge = Boolean(profile.verified) && prefs.badgeVisible;
   const badgeType = free ? "human" : "verified";
-  const showWatermark = shouldShowWatermark(Boolean(profile.verified), prefs);
+  const showWatermark =
+    shouldShowWatermark(Boolean(profile.verified), prefs) &&
+    (profile.verified ? prefs.showRoutBadge : true);
   const wide = layout === "wide";
   const earlyBeliever = Boolean(profile.is_early_believer);
   const [showVerifyInfo, setShowVerifyInfo] = useState(false);
@@ -116,6 +124,43 @@ export function ProfileView({
 
   const memberSince = monthYear(profile.created_at ?? null, locale || "nl");
 
+  const socialRow = (profile.social_links ?? []).length > 0 && (
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+            {(profile.social_links ?? []).map((link) => {
+              const followers = formatFollowers(link.followerCount);
+              const username = (link as { username?: string | null }).username ?? null;
+              return (
+                <a
+                  key={link.platform}
+                  href={link.url}
+                  target="_blank"
+                  rel="me noopener noreferrer"
+                  title={`${PLATFORM_LABEL[link.platform]} — geverifieerd`}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium transition-opacity hover:opacity-80"
+                  style={{ border: `1px solid ${t.border}`, color: t.muted }}
+                >
+                  {username ? (
+                    <>
+                      <SocialPlatformIcon source={link.url} className="h-3.5 w-3.5 text-current" />
+                      <span>@{username.replace(/^@/, "")}</span>
+                      <BadgeCheck className="h-3 w-3 text-emerald-500" aria-hidden />
+                    </>
+                  ) : (
+                    <span className="relative inline-flex">
+                      <SocialPlatformIcon source={link.url} className="h-3.5 w-3.5 text-current" />
+                      <BadgeCheck
+                        className="absolute -right-1 -top-1 z-10 h-2.5 w-2.5 text-emerald-500"
+                        aria-hidden
+                      />
+                    </span>
+                  )}
+                  {followers && <span>{followers} volgers</span>}
+                </a>
+              );
+            })}
+          </div>
+  );
+
   useProfileFavicon(profile.favicon_url ?? profile.avatar_url);
 
   // Entree-effect: exact één keer bij het betreden van het profiel, en nooit
@@ -129,8 +174,16 @@ export function ProfileView({
   return (
     <main
       className={`min-h-screen w-full px-4 pb-12 ${banner ? "pt-0" : "pt-12"}`}
-      style={{ ...surface, color: t.text, fontFamily: FONT_FAMILY[prefs.typography] }}
+      style={{
+        ...surface,
+        color: t.text,
+        fontFamily: prefs.customDesign ? fonts.body : FONT_FAMILY[prefs.typography],
+        fontSize: prefs.customDesign ? `${prefs.fontScale}%` : undefined,
+      }}
     >
+      {overlay && (
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-0" style={overlay} />
+      )}
       {banner && (
         <div
           aria-hidden
@@ -160,8 +213,11 @@ export function ProfileView({
           )}
         </AvatarFrameWrapper>
 
-        <h1 className="mt-4 flex items-center gap-1.5 break-words text-center font-display text-2xl">
-          <span style={nameStyle}>{profile.display_name || `@${profile.username}`}</span>
+        <h1
+          className="mt-4 flex items-center gap-1.5 break-words text-center font-display text-2xl"
+          style={prefs.customDesign ? { fontFamily: fonts.heading } : undefined}
+        >
+          <span style={prefs.customDesign && prefs.titleColor ? { color: prefs.titleColor } : nameStyle}>{profile.display_name || `@${profile.username}`}</span>
           {showBadge && (
             <ProfileBadge
               type={badgeType}
@@ -314,42 +370,8 @@ export function ProfileView({
         {/* Geverifieerde socials met gecachte volgeraantallen (0 externe calls).
             Mode 1 = icoon + gebruikersnaam met vinkje ernaast; mode 2 = alleen
             het icoon met een micro-vinkje over de rechterbovenhoek. */}
-        {(profile.social_links ?? []).length > 0 && (
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-            {(profile.social_links ?? []).map((link) => {
-              const followers = formatFollowers(link.followerCount);
-              const username = (link as { username?: string | null }).username ?? null;
-              return (
-                <a
-                  key={link.platform}
-                  href={link.url}
-                  target="_blank"
-                  rel="me noopener noreferrer"
-                  title={`${PLATFORM_LABEL[link.platform]} — geverifieerd`}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium transition-opacity hover:opacity-80"
-                  style={{ border: `1px solid ${t.border}`, color: t.muted }}
-                >
-                  {username ? (
-                    <>
-                      <SocialPlatformIcon source={link.url} className="h-3.5 w-3.5 text-current" />
-                      <span>@{username.replace(/^@/, "")}</span>
-                      <BadgeCheck className="h-3 w-3 text-emerald-500" aria-hidden />
-                    </>
-                  ) : (
-                    <span className="relative inline-flex">
-                      <SocialPlatformIcon source={link.url} className="h-3.5 w-3.5 text-current" />
-                      <BadgeCheck
-                        className="absolute -right-1 -top-1 z-10 h-2.5 w-2.5 text-emerald-500"
-                        aria-hidden
-                      />
-                    </span>
-                  )}
-                  {followers && <span>{followers} volgers</span>}
-                </a>
-              );
-            })}
-          </div>
-        )}
+        {prefs.socialPosition === "top" && socialRow}
+
 
 
         <div className={`mt-8 grid w-full gap-3 ${wide ? "sm:grid-cols-2" : "grid-cols-1"}`}>
@@ -455,15 +477,25 @@ export function ProfileView({
           )}
         </div>
 
-        {showWatermark && (
-          <a
-            href="/about?ref=watermark"
-            className="mt-10 text-[11px] uppercase tracking-widest transition-opacity hover:opacity-70"
-            style={{ color: t.muted }}
-          >
-            Made with ROUT
-          </a>
-        )}
+        {prefs.socialPosition === "bottom" && socialRow}
+
+        <footer className="mt-10 flex flex-col items-center gap-2">
+          {prefs.socialPosition === "footer" && socialRow}
+          {prefs.footerTagline && (
+            <p className="text-center text-[11px]" style={{ color: t.muted }}>
+              {prefs.footerTagline}
+            </p>
+          )}
+          {showWatermark && (
+            <a
+              href="/about?ref=watermark"
+              className="text-[11px] uppercase tracking-widest transition-opacity hover:opacity-70"
+              style={{ color: t.muted }}
+            >
+              Powered by ROUT
+            </a>
+          )}
+        </footer>
 
       </div>
     </main>

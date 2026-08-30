@@ -2159,10 +2159,10 @@ export function ProfileEditor() {
           )}
 
           </div>
-          <p className="mt-2 text-center text-[11px] text-muted-foreground">
+          <p className="mt-3 text-center text-[11px] text-muted-foreground">
             Wijzigingen zijn direct zichtbaar — opslaan maakt ze live.
           </p>
-
+          </div>
         </aside>
 
       </div>

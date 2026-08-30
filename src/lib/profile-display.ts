@@ -23,6 +23,9 @@ export {
 import { normalizeAvatarFrame, type AvatarFrame } from "./avatar-frames";
 import { normalizeVisitEffect, type VisitEffect } from "./visit-effects";
 import { normalizeFavorites, type ProfileFavorite } from "./favorites";
+import { DEFAULT_DESIGN_PREFS, normalizeDesignPrefs, type ProfileDesignPrefs } from "./profile-design";
+/** Design Studio (presets, wallpaper, knoppen, typografie, footer). */
+export * from "./profile-design";
 /** Favorieten (film, serie, boek, …) — definities leven in `@/lib/favorites`. */
 export type { ProfileFavorite, FavoriteKind } from "./favorites";
 export {
@@ -78,8 +81,10 @@ export interface ProfileDisplayPrefs {
   visitEffect: VisitEffect;
   /** Favoriete films, series, boeken … met (eigen of opgehaalde) afbeelding. */
   favorites: ProfileFavorite[];
-
 }
+
+/** Alle designvelden zitten in dezelfde JSON-blob. */
+export interface ProfileDisplayPrefs extends ProfileDesignPrefs {}
 
 export const DEFAULT_DISPLAY_PREFS: ProfileDisplayPrefs = {
   identityMode: "legal",
@@ -109,6 +114,7 @@ export const DEFAULT_DISPLAY_PREFS: ProfileDisplayPrefs = {
   vcardLabel: null,
   visitEffect: "none",
   favorites: [],
+  ...DEFAULT_DESIGN_PREFS,
 };
 
 export { AVATAR_FRAME_DEFS as AVATAR_FRAMES } from "./avatar-frames";
@@ -216,6 +222,7 @@ export function parseDisplayPrefs(raw: unknown): ProfileDisplayPrefs {
     vcardLabel: textOrNull(r["vcardLabel"], 40),
     visitEffect: normalizeVisitEffect(r["visitEffect"]),
     favorites: normalizeFavorites(r["favorites"]),
+    ...normalizeDesignPrefs(r),
   };
 }
 

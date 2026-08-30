@@ -96,6 +96,7 @@ import {
   themeOf,
 } from "@/lib/profile";
 import { ConversionCoach } from "@/components/dashboard/ConversionCoach";
+import { DesignTabEditor } from "@/components/dashboard/DesignTabEditor";
 import {
   Accordion,
   AccordionContent,
@@ -664,60 +665,78 @@ export function ProfileEditor() {
     <div className={cn("flex flex-1 flex-col space-y-4", showSaveBar && "pb-16 lg:pb-4")}>
       {/* Compacte studiokop: tier-balk en tabs blijven bij het scrollen staan en
           nemen samen nauwelijks hoogte in, zodat de live preview hoger begint. */}
-      <div className="sticky top-14 z-20 -mx-1 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-card/95 px-2 py-1 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-        <span
-          className={cn(
-            "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-            verified ? "bg-primary/10" : "bg-muted",
-          )}
-        >
-          {verified ? "Pro" : "Free"}
-        </span>
-        <span className="min-w-0 max-w-[45%] truncate font-mono text-[11px] font-medium">
-          {host}
-          {styledProfilePath(normalized || "handle", urlStyle)}
-        </span>
-        {claimed && (
+      {/* RIJ 1 — profielstatus & URL-balk */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={cn(
+              "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+              verified ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+            )}
+          >
+            {verified ? "Pro" : "Free"}
+          </span>
           <a
             href={publicPath}
             target="_blank"
             rel="noopener noreferrer"
-            className="shrink-0 text-[10px] font-medium underline"
+            className="min-w-0 truncate font-mono text-xs font-medium underline-offset-4 hover:underline sm:text-sm"
           >
-            Live →
+            {host}
+            {styledProfilePath(normalized || "handle", urlStyle)}
           </a>
-        )}
-
-        {/* Studio tabs — op dezelfde regel zodat de kop maar één balk hoog is. */}
-        <div
-          role="tablist"
-          aria-label="Studio"
-          className="ml-auto flex min-w-0 max-w-full gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          {visibleTabs.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              role="tab"
-              type="button"
-              aria-selected={tab === id}
-              title={label}
-              onClick={() => setTab(id)}
-              className={cn(
-                "flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors",
-                tab === id
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" aria-hidden />
-              <span className="whitespace-nowrap">{label}</span>
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(
+                `https://rout.be${styledProfilePath(normalized || "handle", urlStyle)}`,
+              );
+              toast.success("Link gekopieerd!");
+            }}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11px] font-medium hover:bg-muted"
+          >
+            <Copy className="h-3.5 w-3.5" aria-hidden /> Kopieer
+          </button>
         </div>
+        <a
+          href={publicPath}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-border px-3 text-xs font-medium transition-colors hover:bg-muted"
+        >
+          <Eye className="h-3.5 w-3.5" aria-hidden /> Bekijk live profiel ↗
+        </a>
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="min-w-0 space-y-4">
+      {/* RIJ 2 — hoofdnavigatie van de studio */}
+      <div
+        role="tablist"
+        aria-label="Studio"
+        className="sticky top-14 z-20 flex w-full gap-1 overflow-x-auto rounded-2xl border border-border bg-card/95 p-1 backdrop-blur [scrollbar-width:none] supports-[backdrop-filter]:bg-card/80 [&::-webkit-scrollbar]:hidden"
+      >
+        {visibleTabs.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            role="tab"
+            type="button"
+            aria-selected={tab === id}
+            title={label}
+            onClick={() => setTab(id)}
+            className={cn(
+              "flex h-9 flex-1 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-medium transition-colors",
+              tab === id
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Icon className="h-3.5 w-3.5" aria-hidden />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
+        <div className="min-w-0 space-y-6 lg:col-span-7">
           {tab === "links" && (
             <Accordion type="single" collapsible className="space-y-3">
               <AccordionItem
@@ -1269,7 +1288,33 @@ export function ProfileEditor() {
                 </AccordionContent>
               </AccordionItem>
 
-              {/* 2 — Thema & kleuren */}
+              {/* 2 — Design Studio: presets, wallpaper, knoppen, typografie, footer */}
+              <AccordionItem
+                value="design_studio"
+                className="rounded-2xl border border-border bg-card px-4 sm:px-5"
+              >
+                <AccordionTrigger className="hover:no-underline">
+                  <span className="flex flex-1 items-center justify-between gap-3 pr-2">
+                    <span className="text-base font-medium">✨ Design &amp; Theme Customizer</span>
+                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
+                      {prefs.customDesign ? "Custom" : "Preset"}
+                    </span>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-5">
+                  <DesignTabEditor
+                    prefs={prefs}
+                    setPref={setPref}
+                    theme={theme}
+                    setTheme={setTheme}
+                    cardStyle={cardStyle}
+                    setCardStyle={setCardStyle}
+                    verified={verified}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+
+              {/* 3 — Thema & kleuren */}
               <AccordionItem
                 value="theme_colors"
                 className="rounded-2xl border border-border bg-card px-4 sm:px-5"
@@ -2004,11 +2049,12 @@ export function ProfileEditor() {
 
         
         {/* Live preview — desktop: pinned next to the editor, altijd ónder de vaste header (z-10 < z-50) */}
-        <aside className="z-10 hidden lg:sticky lg:top-4 lg:block lg:h-[calc(100vh-2rem)] lg:overflow-hidden">
+        <aside className="z-10 hidden self-start lg:sticky lg:top-20 lg:col-span-5 lg:block">
+          <div className="flex flex-col items-center justify-start rounded-3xl border border-border/80 bg-card/40 p-6 shadow-2xl">
 
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Live view
+          <div className="mb-4 flex w-full items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              Live preview
             </p>
             {/* Viewport-switcher: telefoonmockup ↔ desktopvenster */}
             <div
@@ -2113,10 +2159,10 @@ export function ProfileEditor() {
           )}
 
           </div>
-          <p className="mt-2 text-center text-[11px] text-muted-foreground">
+          <p className="mt-3 text-center text-[11px] text-muted-foreground">
             Wijzigingen zijn direct zichtbaar — opslaan maakt ze live.
           </p>
-
+          </div>
         </aside>
 
       </div>

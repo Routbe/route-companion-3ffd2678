@@ -47,7 +47,8 @@ export function parseEventListConfig(raw: string | undefined | null): EventListC
   try {
     const p = JSON.parse(raw) as Partial<EventListConfig>;
     const items = (Array.isArray(p.items) ? p.items : [])
-      .filter((i): i is Partial<EventItem> => !!i && typeof i === "object")
+      .filter((i) => !!i && typeof i === "object")
+      .map((i) => i as Partial<EventItem>)
       .slice(0, EVENTS_MAX)
       .map((i) => ({
         title: str(i.title),

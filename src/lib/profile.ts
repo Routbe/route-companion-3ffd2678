@@ -773,7 +773,20 @@ export const BLOCK_TABS: {
     id: "microapps",
     label: "🧰 Native Micro-apps",
     description: "Boekingen, contact en e-mailcapture",
-    kinds: ["booking_request", "calendar", "calcom", "calendly", "vcard", "newsletter"],
+    kinds: [
+      "booking_request",
+      "contact_form",
+      "event_list",
+      "live_poll",
+      "faq_accordion",
+      "map_embed",
+      "calendar",
+      "calcom",
+      "calendly",
+      "vcard",
+      "newsletter",
+    ],
+
   },
   {
     id: "commerce",

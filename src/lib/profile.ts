@@ -695,11 +695,42 @@ export const BLOCK_KINDS: {
     placeholder: "Plak een YouTube-, Spotify- of PDF-link…",
   },
   {
+    kind: "contact_form",
+    label: "Contactformulier / E-mailcapture (ROUT native)",
+    category: "contact",
+    placeholder: "Neem contact op",
+  },
+  {
+    kind: "live_poll",
+    label: "Interactieve poll",
+    category: "web",
+    placeholder: "Welk project moet ik eerst bouwen?",
+  },
+  {
+    kind: "faq_accordion",
+    label: "FAQ / Veelgestelde vragen",
+    category: "layout",
+    placeholder: "Veelgestelde vragen",
+  },
+  {
+    kind: "map_embed",
+    label: "Locatie & kaart",
+    category: "contact",
+    placeholder: "Grote Markt, Brussel",
+  },
+  {
+    kind: "event_list",
+    label: "Evenementen / Agenda (ROUT native)",
+    category: "web",
+    placeholder: "Aankomende evenementen",
+  },
+  {
     kind: "promo",
     label: "Promo / Featured link",
     category: "contact",
     placeholder: "https://…",
   },
+
   // Layout-elementen: geen link, alleen visuele structuur op het profiel.
   {
     kind: "text",
@@ -1048,7 +1079,13 @@ export function blockHref(block: ProfileBlock): string {
     case "booking_request":
     case "media_gallery":
     case "media_embed":
+    case "contact_form":
+    case "live_poll":
+    case "faq_accordion":
+    case "map_embed":
+    case "event_list":
       return "";
+
     case "calendar":
       return raw.startsWith("http") ? raw : `https://${raw.replace(/^\/+/, "")}`;
     case "phone":
@@ -1071,7 +1108,13 @@ export const isWidgetBlock = (kind: string) =>
   kind === "calendar" ||
   kind === "booking_request" ||
   kind === "media_gallery" ||
-  kind === "media_embed";
+  kind === "media_embed" ||
+  kind === "contact_form" ||
+  kind === "live_poll" ||
+  kind === "faq_accordion" ||
+  kind === "map_embed" ||
+  kind === "event_list";
+
 
 export const newBlockId = () =>
   `b_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;

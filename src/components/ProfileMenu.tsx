@@ -40,7 +40,6 @@ export function ProfileMenu() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const { isAdmin } = useIsAdmin();
   const loadAccount = useServerFn(getMyAccount);
-  const dualIdentity = verified || tier === "pro" || earlyBeliever;
 
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -114,8 +113,6 @@ export function ProfileMenu() {
       ? "Pro"
       : "Free";
   const isPaidTier = tierLabel !== "Free";
-  const verifiedPath = `/${handle}`;
-  const aliasPath = `/u/${handle}`;
 
 
   return (

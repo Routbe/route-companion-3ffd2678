@@ -75,13 +75,13 @@ export function VerifiedBadgeCard({
             <p className="text-xs text-muted-foreground">
               Plaats deze HTML in je footer. De badge linkt terug naar je ROUT-profiel.
             </p>
-            <pre className="max-h-40 overflow-auto rounded-md border bg-muted/40 p-3 text-[11px] leading-relaxed">
+            <pre className="max-h-44 select-all overflow-x-auto whitespace-pre-wrap break-all rounded-2xl border border-border/80 bg-muted/60 p-4 font-mono text-xs leading-relaxed text-muted-foreground">
               <code>{snippets.html}</code>
             </pre>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button type="button" size="sm" onClick={() => copy("html")} className="gap-2">
                 {copied === "html" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                HTML kopiëren
+                {copied === "html" ? "Gekopieerd!" : "HTML kopiëren"}
               </Button>
               <Button
                 type="button"
@@ -91,7 +91,7 @@ export function VerifiedBadgeCard({
                 className="gap-2"
               >
                 {copied === "svg" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                SVG-URL kopiëren
+                {copied === "svg" ? "Gekopieerd!" : "SVG-URL kopiëren"}
               </Button>
             </div>
           </div>

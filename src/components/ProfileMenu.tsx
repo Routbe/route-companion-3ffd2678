@@ -6,22 +6,18 @@ import {
   Settings,
   ChevronDown,
   ShieldCheck,
-  BadgeCheck,
-  Shield,
   Sparkles,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useRouterState } from "@tanstack/react-router";
 import { Link, useNavigate } from "@/lib/router-compat";
-import { useIdentitySpace } from "@/hooks/useIdentitySpace";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin, clearAdminRoleCache } from "@/hooks/useIsAdmin";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -45,7 +41,6 @@ export function ProfileMenu() {
   const { isAdmin } = useIsAdmin();
   const loadAccount = useServerFn(getMyAccount);
   const dualIdentity = verified || tier === "pro" || earlyBeliever;
-  const { space, select } = useIdentitySpace(dualIdentity);
 
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });

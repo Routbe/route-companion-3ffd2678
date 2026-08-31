@@ -26,6 +26,8 @@ import {
   type Typography,
 } from "@/lib/profile-display";
 import { handleLengthMessage, normalizeHandleForStorage } from "@/lib/handle-rules";
+import { strictHandleIssue } from "@/lib/handle-validation";
+import { HandleErrorBanner } from "@/components/HandleValidationMessage";
 
 /** Wizardstappen — de voortgangsbalk bovenaan volgt exact deze volgorde. */
 const STEPS = [
@@ -123,7 +125,8 @@ export default function Onboarding() {
 
   // 2. Live beschikbaarheidscheck tegen Neon Postgres (debounced).
   const normalized = normalizeHandleForStorage(handle);
-  const ruleError = handleLengthMessage(normalized);
+  const strictIssue = strictHandleIssue(handle);
+  const ruleError = strictIssue ?? handleLengthMessage(normalized);
 
   useEffect(() => {
     if (timer.current) window.clearTimeout(timer.current);
@@ -180,7 +183,7 @@ export default function Onboarding() {
     [user?.id, normalized, displayName, bio, avatarUrl, theme, blocks, tier, typography],
   );
 
-  const canContinue = step !== 1 || availability.state === "ok";
+  const canContinue = step !== 1 || (availability.state === "ok" && !strictIssue);
 
   const finish = useCallback(async () => {
     if (!user) return;
@@ -287,7 +290,8 @@ export default function Onboarding() {
                         ) : null}
                       </span>
                     </div>
-                    {ruleError || availability.reason ? (
+                    {strictIssue && <HandleErrorBanner message={strictIssue} />}
+                    {!strictIssue && (ruleError || availability.reason) ? (
                       <p className="text-xs text-muted-foreground">
                         {ruleError ?? availability.reason}
                       </p>

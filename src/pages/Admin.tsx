@@ -88,6 +88,7 @@ import {
   exportInboundChunk,
   getDeploymentChecklist,
   getSystemHealth,
+  getSystemHealthRows,
   listAliases,
   listAuditLogCursor,
   listAuditLogPage,
@@ -123,6 +124,14 @@ import type { UserSegment } from "@/lib/admin-segments";
 
 type Pending = Awaited<ReturnType<typeof listPendingVerifications>>[number];
 type UserRow = Awaited<ReturnType<typeof listUsers>>["rows"][number];
+
+/** KPI-tegels waarop een admin kan doorklikken naar de onderliggende profielen. */
+type KpiMetric =
+  | "activeUsers"
+  | "pendingVerifications"
+  | "incompletePayments"
+  | "pendingSepaPayments"
+  | "failedAliasSyncs";
 type AuditRow = Awaited<ReturnType<typeof listAuditLogPage>>["rows"][number];
 type Checklist = Awaited<ReturnType<typeof getDeploymentChecklist>>;
 
@@ -371,6 +380,7 @@ export default function Admin() {
   const loadInbound = useServerFn(listInboundPayments);
   const exportInboundChunkFn = useServerFn(exportInboundChunk);
   const loadHealth = useServerFn(getSystemHealth);
+  const loadHealthRows = useServerFn(getSystemHealthRows);
   const bulkVip = useServerFn(bulkGrantVipToUsers);
   const bulkRetryAliasFn = useServerFn(bulkRetryAlias);
   const matchReference = useServerFn(matchPaymentReference);
@@ -474,6 +484,20 @@ export default function Admin() {
 
   const searchTimer = useRef<number | undefined>(undefined);
   const [health, setHealth] = useState<Awaited<ReturnType<typeof getSystemHealth>> | null>(null);
+  // KPI-drilldown: op welke tegel is geklikt en welke profielen horen daarbij.
+  const [kpiDrill, setKpiDrill] = useState<{ metric: KpiMetric; label: string } | null>(null);
+  const [kpiRows, setKpiRows] = useState<Awaited<ReturnType<typeof getSystemHealthRows>> | null>(
+    null,
+  );
+
+  /** Opent de lijst met profielen achter een KPI-tegel. */
+  const openKpiDrill = (metric: KpiMetric, label: string) => {
+    setKpiDrill({ metric, label });
+    setKpiRows(null);
+    void loadHealthRows({ data: { metric } })
+      .then((rows) => setKpiRows(rows))
+      .catch(() => setKpiRows([]));
+  };
   const [activeTab, setActiveTab] = useState("users");
   const { t } = useTranslation();
   const [viewAsUser, setViewAsUser] = useState<UserRow | null>(null);
@@ -1276,24 +1300,36 @@ export default function Admin() {
             data-testid="admin-health-kpis"
             className="grid grid-cols-2 gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-5"
           >
-            {[
-              [t("admin.kpi.active_users"), health.activeUsers],
-              [t("admin.kpi.pending_verifications"), health.pendingVerifications],
-              [t("admin.kpi.incomplete_payments"), health.incompletePayments],
-              [t("admin.kpi.pending_sepa"), health.pendingSepaPayments],
-              [t("admin.kpi.failed_alias"), health.failedAliasSyncs],
+            {([
+              [t("admin.kpi.active_users"), health.activeUsers, "activeUsers"],
+              [t("admin.kpi.pending_verifications"), health.pendingVerifications, "pendingVerifications"],
+              [t("admin.kpi.incomplete_payments"), health.incompletePayments, "incompletePayments"],
+              [t("admin.kpi.pending_sepa"), health.pendingSepaPayments, "pendingSepaPayments"],
+              [t("admin.kpi.failed_alias"), health.failedAliasSyncs, "failedAliasSyncs"],
               [
                 t("admin.kpi.improvmx"),
                 health.improvmxConfigured
                   ? t("admin.kpi.configured")
                   : t("admin.kpi.not_configured"),
+                null,
               ],
-            ].map(([label, value]) => (
-              <div key={label as string} className="space-y-0.5">
+            ] as Array<[string, string | number, KpiMetric | null]>).map(([label, value, metric]) => (
+              <div key={label} className="space-y-0.5">
                 <p className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-muted-foreground">
                   <Activity className="h-3 w-3" aria-hidden /> {label}
                 </p>
-                <p className="text-lg font-semibold">{value}</p>
+                {metric ? (
+                  <button
+                    type="button"
+                    onClick={() => openKpiDrill(metric, label)}
+                    className="text-lg font-semibold underline decoration-dotted underline-offset-4 hover:text-primary"
+                    title="Toon de profielen achter dit getal"
+                  >
+                    {value}
+                  </button>
+                ) : (
+                  <p className="text-lg font-semibold">{value}</p>
+                )}
               </div>
             ))}
           </section>
@@ -2926,6 +2962,51 @@ export default function Admin() {
         </Tabs>
 
       </div>
+
+      {/* KPI-drilldown: profielen achter een getal ------------------------ */}
+      <Dialog open={Boolean(kpiDrill)} onOpenChange={(open) => !open && setKpiDrill(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{kpiDrill?.label}</DialogTitle>
+            <DialogDescription>
+              {kpiRows === null
+                ? "Profielen laden…"
+                : `${kpiRows.length} profiel${kpiRows.length === 1 ? "" : "en"}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[55vh] space-y-1 overflow-y-auto">
+            {kpiRows?.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Geen profielen gevonden.</p>
+            ) : null}
+            {(kpiRows ?? []).map((row) => (
+              <div
+                key={`${row.userId}-${row.detail ?? ""}`}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {row.displayName || row.username || row.userId}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {row.username ? `@${row.username}` : row.userId}
+                    {row.detail ? ` · ${row.detail}` : ""}
+                  </p>
+                </div>
+                {row.username ? (
+                  <a
+                    href={`/${row.username}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 text-xs underline"
+                  >
+                    Profiel
+                  </a>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Reject a payment ------------------------------------------------ */}
       <Dialog

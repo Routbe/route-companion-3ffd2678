@@ -26,6 +26,8 @@ import {
   revokeVipGrant,
 } from "@/lib/admin.functions";
 import { SHORT_HANDLE_MAX, SHORT_HANDLE_MIN, needsVipGrant } from "@/lib/handle-rules";
+import { strictHandleIssue } from "@/lib/handle-validation";
+import { HandleErrorBanner } from "@/components/HandleValidationMessage";
 
 type SyncStatus = "synced" | "pending" | "failed";
 
@@ -227,6 +229,11 @@ export function AdminVipPanel() {
     const clean = newHandle.trim().toLowerCase().replace(/^@/, "");
     if (!target) {
       setError("Select the account that should receive the handle first.");
+      return;
+    }
+    const strict = strictHandleIssue(clean);
+    if (strict) {
+      setError(strict);
       return;
     }
     if (!needsVipGrant(clean)) {
@@ -462,11 +469,17 @@ export function AdminVipPanel() {
                 placeholder="e.g. brand partnership ROUT-1042"
               />
             </div>
-            <Button type="submit" disabled={!target || busy !== null}>
+            <Button
+              type="submit"
+              disabled={!target || busy !== null || Boolean(strictHandleIssue(newHandle))}
+            >
               {busy && target ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Grant VIP handle
             </Button>
           </div>
+          {strictHandleIssue(newHandle) ? (
+            <HandleErrorBanner message={strictHandleIssue(newHandle)!} />
+          ) : null}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </form>
       </div>

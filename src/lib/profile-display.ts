@@ -39,6 +39,17 @@ export {
 export type { VisitEffect } from "./visit-effects";
 export { VISIT_EFFECTS, runVisitEffect } from "./visit-effects";
 export type BannerStyle = "none" | "gradient" | "image";
+/** Richting van het kleurverloop in de banner (of radiaal vanuit het midden). */
+export type BannerDirection =
+  | "to right"
+  | "to left"
+  | "to bottom"
+  | "to top"
+  | "to bottom right"
+  | "to bottom left"
+  | "to top right"
+  | "to top left"
+  | "radial";
 export type NameAccent = "classic" | "gold" | "neon" | "chrome";
 
 export interface ProfileDisplayPrefs {
@@ -57,6 +68,8 @@ export interface ProfileDisplayPrefs {
   /** Kleurenpaar voor de gradient-banner. */
   bannerFrom: string | null;
   bannerTo: string | null;
+  /** Vanwaar het verloop start. */
+  bannerDirection: BannerDirection;
   /** Overschrijft de themakleur van het canvas / het patroonaccent. */
   canvasColor: string | null;
   patternColor: string | null;
@@ -99,6 +112,7 @@ export const DEFAULT_DISPLAY_PREFS: ProfileDisplayPrefs = {
   bannerImageUrl: null,
   bannerFrom: null,
   bannerTo: null,
+  bannerDirection: "to bottom right",
   canvasColor: null,
   patternColor: null,
   statusLine: null,
@@ -123,6 +137,19 @@ export const BANNER_STYLES: { id: BannerStyle; label: string }[] = [
   { id: "none", label: "Geen banner" },
   { id: "gradient", label: "Kleurverloop" },
   { id: "image", label: "Eigen afbeelding" },
+];
+
+/** Richtingen voor het bannerverloop — het pijltje toont waar het naartoe loopt. */
+export const BANNER_DIRECTIONS: { id: BannerDirection; label: string }[] = [
+  { id: "to right", label: "→ Naar rechts" },
+  { id: "to left", label: "← Naar links" },
+  { id: "to bottom", label: "↓ Naar onder" },
+  { id: "to top", label: "↑ Naar boven" },
+  { id: "to bottom right", label: "↘ Linksboven → rechtsonder" },
+  { id: "to bottom left", label: "↙ Rechtsboven → linksonder" },
+  { id: "to top right", label: "↗ Linksonder → rechtsboven" },
+  { id: "to top left", label: "↖ Rechtsonder → linksboven" },
+  { id: "radial", label: "◎ Radiaal uit het midden" },
 ];
 
 export const NAME_ACCENTS: { id: NameAccent; label: string }[] = [
@@ -207,6 +234,21 @@ export function parseDisplayPrefs(raw: unknown): ProfileDisplayPrefs {
     bannerImageUrl: urlOrNull(r["bannerImageUrl"]),
     bannerFrom: colorOrNull(r["bannerFrom"]),
     bannerTo: colorOrNull(r["bannerTo"]),
+    bannerDirection: oneOf(
+      r["bannerDirection"],
+      [
+        "to right",
+        "to left",
+        "to bottom",
+        "to top",
+        "to bottom right",
+        "to bottom left",
+        "to top right",
+        "to top left",
+        "radial",
+      ] as const,
+      "to bottom right",
+    ),
     canvasColor: colorOrNull(r["canvasColor"]),
     patternColor: colorOrNull(r["patternColor"]),
     statusLine: textOrNull(r["statusLine"], 60),
@@ -243,7 +285,13 @@ export function bannerStyleOf(
   if (prefs.bannerStyle === "gradient") {
     const from = prefs.bannerFrom ?? accent;
     const to = prefs.bannerTo ?? theme.card;
-    return { backgroundImage: `linear-gradient(120deg, ${from}, ${to})` };
+    const dir = prefs.bannerDirection;
+    return {
+      backgroundImage:
+        dir === "radial"
+          ? `radial-gradient(circle at 50% 50%, ${from}, ${to})`
+          : `linear-gradient(${dir}, ${from}, ${to})`,
+    };
   }
   return null;
 }

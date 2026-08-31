@@ -38,17 +38,23 @@ export const fetchLinkPreview = createServerFn({ method: "POST" })
       const res = await fetch(target.toString(), {
         method: "GET",
         redirect: "follow",
-        headers: { "user-agent": "ROUT-LinkPreview/1.0", accept: "text/html,*/*" },
-        signal: AbortSignal.timeout(6000),
+        headers: {
+          // Browserachtige headers: IMDb, Goodreads en Spotify weigeren kale bots.
+          "user-agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "accept-language": "nl,en;q=0.8",
+        },
+        signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) return { ok: false as const, reason: "unreachable" as const };
-      const html = (await res.text()).slice(0, 300_000);
+      const html = (await res.text()).slice(0, 600_000);
 
       const meta = (names: string[]): string | null => {
         for (const name of names) {
           const re = new RegExp(
-            `<meta[^>]+(?:property|name)=["']${name}["'][^>]*content=["']([^"']+)["']|` +
-              `<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["']${name}["']`,
+            `<meta[^>]+(?:property|name|itemprop)=["']${name}["'][^>]*content=["']([^"']+)["']|` +
+              `<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name|itemprop)=["']${name}["']`,
             "i",
           );
           const m = re.exec(html);
@@ -58,12 +64,97 @@ export const fetchLinkPreview = createServerFn({ method: "POST" })
         return null;
       };
 
-      const rawImage = meta(["og:image", "og:image:url", "twitter:image", "twitter:image:src"]);
+      /** Zoekt in JSON-LD (schema.org) naar `image` — IMDb & Goodreads zetten de cover daar. */
+      const jsonLdImage = (): string | null => {
+        const blocks = html.match(
+          /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+        );
+        if (!blocks) return null;
+        const walk = (node: unknown, depth = 0): string | null => {
+          if (depth > 6 || !node) return null;
+          if (typeof node === "string") return /^https?:\/\//.test(node) ? node : null;
+          if (Array.isArray(node)) {
+            for (const item of node) {
+              const found = walk(item, depth + 1);
+              if (found) return found;
+            }
+            return null;
+          }
+          if (typeof node === "object") {
+            const obj = node as Record<string, unknown>;
+            for (const key of ["image", "thumbnailUrl", "primaryImageOfPage", "url"]) {
+              if (key in obj) {
+                const found = walk(obj[key], depth + 1);
+                if (found) return found;
+              }
+            }
+            for (const value of Object.values(obj)) {
+              if (value && typeof value === "object") {
+                const found = walk(value, depth + 1);
+                if (found) return found;
+              }
+            }
+          }
+          return null;
+        };
+        for (const block of blocks) {
+          const raw = block.replace(/^[\s\S]*?>/, "").replace(/<\/script>$/i, "");
+          try {
+            const found = walk(JSON.parse(raw));
+            if (found) return found;
+          } catch {
+            // Ongeldige JSON-LD overslaan.
+          }
+        }
+        return null;
+      };
+
+      /** Laatste redmiddel: de grootste cover-achtige <img> of preload-afbeelding. */
+      const scrapedImage = (): string | null => {
+        const preload = /<link[^>]+rel=["'](?:image_src|preload)["'][^>]*href=["']([^"']+\.(?:jpe?g|png|webp)[^"']*)["']/i.exec(
+          html,
+        );
+        if (preload?.[1]) return preload[1];
+        const candidates = [...html.matchAll(/<img[^>]+>/gi)]
+          .map((m) => m[0])
+          .filter((tag) =>
+            /(poster|cover|artwork|hero|thumb|book|movie|media-amazon|images\.gr-assets|scdn\.co)/i.test(
+              tag,
+            ),
+          );
+        for (const tag of candidates) {
+          const src =
+            /(?:src|data-src|data-original)=["']([^"']+)["']/i.exec(tag)?.[1] ??
+            /srcset=["']([^"'\s]+)/i.exec(tag)?.[1];
+          if (src && /^(?:https?:)?\/\/|^\//.test(src) && !/\.svg(?:$|\?)/i.test(src)) return src;
+        }
+        return null;
+      };
+
+      const rawImage =
+        meta([
+          "og:image",
+          "og:image:url",
+          "og:image:secure_url",
+          "twitter:image",
+          "twitter:image:src",
+          "image",
+        ]) ??
+        jsonLdImage() ??
+        scrapedImage();
+
       const rawTitle =
         meta(["og:title", "twitter:title"]) ??
         (/<title[^>]*>([^<]{1,200})<\/title>/i.exec(html)?.[1] ?? null);
 
-      const imageUrl = rawImage ? new URL(rawImage, target).toString() : null;
+      let imageUrl: string | null = null;
+      if (rawImage) {
+        try {
+          imageUrl = new URL(rawImage.replace(/^\/\//, "https://"), target).toString();
+        } catch {
+          imageUrl = null;
+        }
+      }
       return {
         ok: true as const,
         title: rawTitle ? rawTitle.trim().slice(0, 80) : null,

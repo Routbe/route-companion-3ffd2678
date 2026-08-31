@@ -114,5 +114,13 @@ export const setUserVerifiedStatus = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { assertAdminPermission, setUserVerified } = await import("./admin-access.server");
     await assertAdminPermission(context.userId, "verify_users");
-    return setUserVerified({ adminId: context.userId, ...data });
+    try {
+      return await setUserVerified({ adminId: context.userId, ...data });
+    } catch (error) {
+      // Databasefouten als leesbare melding tonen i.p.v. een generieke crash.
+      return {
+        ok: false as const,
+        error: error instanceof Error ? error.message : "Verifiëren is mislukt.",
+      };
+    }
   });

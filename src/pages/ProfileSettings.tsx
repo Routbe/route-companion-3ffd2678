@@ -11,6 +11,8 @@ import { AvatarUpload } from "@/components/settings/AvatarUpload";
 import { db } from "@/lib/db/client";
 import { handleIssue, handleRuleHint, normalizeHandle } from "@/lib/profile";
 import { normalizeHandleForStorage } from "@/lib/handle-rules";
+import { strictHandleIssue } from "@/lib/handle-validation";
+import { HandleErrorBanner } from "@/components/HandleValidationMessage";
 import { useHandleAvailability } from "@/hooks/useHandleAvailability";
 import { styledProfilePath } from "@/lib/profile-url";
 import { useUrlStyle } from "@/hooks/useUrlStyle";
@@ -202,6 +204,7 @@ export default function ProfileSettings() {
     () => ({ tier: (verified ? "verified" : "free") as "verified" | "free", legalName }),
     [verified, legalName],
   );
+  const strictIssue = strictHandleIssue(form.username);
   const handleError = useMemo(
     () => (form.username ? handleIssue(normalizeHandle(form.username), handleCtx) : null),
     [form.username, handleCtx],
@@ -219,7 +222,7 @@ export default function ProfileSettings() {
     setForm((f) => ({ ...f, [key]: value }));
 
   async function save() {
-    if (!user || handleError) return;
+    if (!user || handleError || strictIssue) return;
     setBusy(true);
     const payload = {
       username: normalizeHandle(form.username) || null,
@@ -313,7 +316,8 @@ export default function ProfileSettings() {
                       : t("handle.taken")}
                   </p>
                 )}
-                {handleError && (
+                {strictIssue && <HandleErrorBanner message={strictIssue} className="mt-2" />}
+                {!strictIssue && handleError && (
                   <p className="text-xs font-medium text-destructive">{t("handle.invalid")}</p>
                 )}
 
@@ -365,7 +369,13 @@ export default function ProfileSettings() {
               <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
                 <Button
                   onClick={save}
-                  disabled={busy || !dirty || Boolean(handleError) || availability.state === "taken"}
+                  disabled={
+                    busy ||
+                    !dirty ||
+                    Boolean(handleError) ||
+                    Boolean(strictIssue) ||
+                    availability.state === "taken"
+                  }
                   className="gap-1.5 rounded-none"
                 >
                   {busy ? (

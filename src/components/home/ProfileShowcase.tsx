@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, BadgeCheck, QrCode, Shield, Sun, Moon } from "lucide-react";
 import { profileQrSvg, DEFAULT_PROFILE_QR_STYLE } from "@/lib/profile-qr";
 
@@ -60,7 +60,11 @@ export function ProfileShowcase() {
   const [showQr, setShowQr] = useState(false);
   const item = SHOWCASES[active]!;
   const t = dark ? item.dark : item.light;
-  const url = `https://rout.be/${item.path}`;
+  // Beide tiers hebben een echte, aparte voorbeeldpagina in deze app; in de
+  // preview-omgeving openen we die op dezelfde origin zodat de link werkt.
+  const [origin, setOrigin] = useState("https://rout.be");
+  useEffect(() => setOrigin(window.location.origin), []);
+  const url = `${origin}/${item.path}`;
 
   const qr = useMemo(
     () =>

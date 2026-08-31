@@ -6,6 +6,7 @@ import { sql } from "@/lib/neon";
 import { writeAudit } from "./admin.server";
 import { normalizeLegalName } from "./legal-name";
 import { verifiedHandleError, verifiedHandleSuggestionList } from "./verified-handle";
+import { sendVerificationApproved, sendVerificationRejected } from "@/lib/brevo/client";
 
 type Row = Record<string, unknown>;
 
@@ -370,12 +371,24 @@ export async function setUserVerified(opts: {
   adminId: string;
   userId: string;
   verified: boolean;
-  /** Optioneel: de admin kan de wettelijke naam meteen mee invullen. */
+  /** Wettelijke naam; verplicht bij verifiëren, want die bepaalt de handle. */
   firstName?: string;
   lastName?: string;
+  /** Optionele reden die in de afwijzingsmail komt. */
+  reason?: string | null;
 }) {
   const first = (opts.firstName ?? "").trim();
   const last = (opts.lastName ?? "").trim();
+
+  // De naamkolommen bestaan niet op elke database — anders faalde het
+  // verifiëren met "column does not exist" in plaats van een nette melding.
+  await sql`
+    alter table public.profiles
+      add column if not exists legal_first_name text,
+      add column if not exists legal_last_name text,
+      add column if not exists verified_legal_name text
+  `.catch(() => undefined);
+
   if (first || last) {
     await sql`
       update public.profiles
@@ -387,18 +400,28 @@ export async function setUserVerified(opts: {
   }
 
   const rows = (await sql`
-    select verified_legal_name, legal_first_name, legal_last_name, username
+    select verified_legal_name, legal_first_name, legal_last_name, username,
+           coalesce(forwarding_email, email) as email, preferred_language
       from public.profiles where id = ${opts.userId} limit 1
   `) as Row[];
   const row = rows[0];
   if (!row) return { ok: false as const, error: "Gebruiker niet gevonden." };
 
-  const legalName =
-    ((row["verified_legal_name"] as string | null) ?? "").trim() ||
+  const storedName =
     `${(row["legal_first_name"] as string | null) ?? ""} ${(row["legal_last_name"] as string | null) ?? ""}`.trim();
+  const legalName =
+    (first && last ? `${first} ${last}` : "") ||
+    storedName ||
+    ((row["verified_legal_name"] as string | null) ?? "").trim();
 
-  // De naam is optioneel: verifiëren mag ook zonder, dan blijft het blauwe
-  // vinkje zonder naam achter de popover staan tot de naam bekend is.
+  // Zonder voor- én achternaam kan er geen geverifieerde handle bestaan, dus
+  // weigeren we met een duidelijke melding in plaats van half te verifiëren.
+  if (opts.verified && verifiedHandleSuggestionList(legalName).length === 0) {
+    return {
+      ok: false as const,
+      error: "Vul eerst de wettelijke voor- én achternaam in; die bepaalt de geverifieerde handle.",
+    };
+  }
 
   await sql`
     update public.profiles
@@ -410,9 +433,9 @@ export async function setUserVerified(opts: {
      where id = ${opts.userId}
   `;
 
-  // Verificatie promoot het account naar de pro-tier en zet — indien nog niet
-  // gebeurd — de eerste root-handle op basis van de wettelijke naam, zodat de
-  // gebruiker van /u/<alias> naar rout.be/<handle> verhuist.
+  // Verificatie promoot het account naar de pro-tier en zet de root-handle op
+  // basis van de wettelijke naam, zodat de gebruiker van /u/<alias> naar
+  // rout.be/voornaam.achternaam verhuist. De oude alias blijft bewaard.
   let promotedHandle: string | null = null;
   if (opts.verified) {
     await sql`
@@ -423,22 +446,37 @@ export async function setUserVerified(opts: {
       console.error("[verify] tier promotion failed", error);
     });
 
-    const currentHandle = ((row["username"] as string | null) ?? "").trim();
-    if (!currentHandle && legalName) {
-      for (const candidate of verifiedHandleSuggestionList(legalName)) {
+    const currentHandle = ((row["username"] as string | null) ?? "").trim().toLowerCase();
+    const allowed = verifiedHandleSuggestionList(legalName);
+    // Al een handle die bij de echte naam past? Dan blijft die staan.
+    const alreadyOk = Boolean(currentHandle) && allowed.includes(currentHandle);
+
+    if (!alreadyOk) {
+      for (const candidate of allowed) {
         const taken = (await sql`
-          select id from public.profiles where username = ${candidate} limit 1
+          select id from public.profiles
+           where lower(username) = ${candidate} and id <> ${opts.userId} limit 1
         `) as Row[];
         if (taken.length) continue;
         await sql`
-          update public.profiles set username = ${candidate}, updated_at = now()
+          update public.profiles
+             set username = ${candidate},
+                 subdomain_alias = coalesce(nullif(subdomain_alias, ''), nullif(${currentHandle}, '')),
+                 updated_at = now()
            where id = ${opts.userId}
         `;
         promotedHandle = candidate;
         break;
       }
+      if (!promotedHandle) {
+        return {
+          ok: false as const,
+          error: "Alle handles op basis van deze naam zijn al in gebruik — kies handmatig een handle.",
+        };
+      }
     }
   }
+
 
 
   await writeAudit({
@@ -448,6 +486,30 @@ export async function setUserVerified(opts: {
     targetLabel: (row["username"] as string | null) ?? null,
     notes: legalName || null,
   });
+
+  // Brevo-dispatch: goedkeuring (blauw vinkje) of afwijzing van de verificatie.
+  const notifyEmail = (row["email"] as string | null) ?? null;
+  const notifyLanguage = (row["preferred_language"] as string | null) ?? "nl";
+  if (notifyEmail) {
+    const handle = promotedHandle ?? ((row["username"] as string | null) ?? "");
+    const origin = (process.env["PUBLIC_SITE_URL"] ?? "https://rout.be").replace(/\/$/, "");
+    if (opts.verified) {
+      await sendVerificationApproved({
+        to: notifyEmail,
+        language: notifyLanguage,
+        legalName,
+        handle,
+        profileUrl: `${origin}/${handle}`,
+      }).catch(() => undefined);
+    } else {
+      await sendVerificationRejected({
+        to: notifyEmail,
+        language: notifyLanguage,
+        name: legalName || handle,
+        reason: opts.reason ?? null,
+      }).catch(() => undefined);
+    }
+  }
 
   return { ok: true as const, verified: opts.verified, legalName, promotedHandle };
 }

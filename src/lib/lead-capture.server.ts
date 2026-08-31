@@ -5,6 +5,7 @@
 import { sql } from "@/lib/neon";
 import { sendMail } from "@/emails/send.server";
 import { parseContactFormConfig } from "@/lib/contact-form";
+import { sendLeadWelcome } from "@/lib/brevo/client";
 
 type Row = Record<string, unknown>;
 
@@ -72,6 +73,14 @@ export async function captureLead(
       text: `Nieuw bericht via ROUT.\nNaam: ${input.name ?? "-"}\nE-mail: ${input.email}\n${input.message ?? ""}`,
     });
   }
+
+  // Welkomstmail naar de inschrijver zelf.
+  await sendLeadWelcome({
+    to: input.email,
+    name: input.name,
+    ownerName: owner.displayName ?? owner.username,
+    profileUrl: `${(process.env["PUBLIC_SITE_URL"] ?? "https://rout.be").replace(/\/$/, "")}/${owner.username}`,
+  }).catch(() => undefined);
 
   return { ok: true, message: owner.config.successMessage };
 }

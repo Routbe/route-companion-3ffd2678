@@ -21,6 +21,7 @@ import {
   setLegalName,
   setUserVerifiedStatus,
 } from "@/lib/admin-access.functions";
+import { verifiedHandleSuggestionList } from "@/lib/verified-handle";
 
 type Grant = Awaited<ReturnType<typeof listAdminAccess>>[number];
 type Insight = Awaited<ReturnType<typeof getUserInsightForAdmin>>;
@@ -136,15 +137,18 @@ export function AdminAccessPanel() {
 
   const toggleVerified = async (verified: boolean) => {
     if (!insight) return;
+    // Verifiëren kan alleen mét wettelijke naam: die bepaalt de handle.
+    if (verified && (!verifyFirst.trim() || !verifyLast.trim())) {
+      notifyError("Voor- en achternaam zijn verplicht om te verifiëren.");
+      return;
+    }
     setBusy(true);
     try {
       const result = await setUserVerifiedStatus({
         data: {
           userId: insight.userId,
           verified,
-          // Namen zijn optioneel: leeg laten mag, dan blijft de naam ongewijzigd.
-          ...(verified && verifyFirst.trim() ? { firstName: verifyFirst.trim() } : {}),
-          ...(verified && verifyLast.trim() ? { lastName: verifyLast.trim() } : {}),
+          ...(verified ? { firstName: verifyFirst.trim(), lastName: verifyLast.trim() } : {}),
         },
       });
       if (!result.ok) {
@@ -369,9 +373,9 @@ export function AdminAccessPanel() {
               <DialogHeader>
                 <DialogTitle>Markeer als verified</DialogTitle>
                 <DialogDescription>
-                  Vul de wettelijke voor- en achternaam in als je die hebt — dit is niet
-                  verplicht. De naam bepaalt welke gebruikersnamen dit geverifieerde account mag
-                  claimen (voornaam + achternaam, één deel mag een initiaal zijn).
+                  Vul de wettelijke voor- en achternaam in. Die naam is verplicht: het account
+                  krijgt het blauwe vinkje, de pro-tier en een handle op basis van de naam
+                  (voornaam + achternaam, één deel mag een initiaal zijn).
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -394,6 +398,12 @@ export function AdminAccessPanel() {
                   />
                 </div>
               </div>
+              {verifiedHandleSuggestionList(`${verifyFirst} ${verifyLast}`.trim())[0] ? (
+                <p className="font-mono text-xs text-muted-foreground">
+                  Voorstel: rout.be/
+                  {verifiedHandleSuggestionList(`${verifyFirst} ${verifyLast}`.trim())[0]}
+                </p>
+              ) : null}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setVerifyOpen(false)}>
                   Annuleren

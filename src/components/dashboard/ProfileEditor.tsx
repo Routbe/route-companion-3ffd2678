@@ -63,6 +63,7 @@ import {
   BACKGROUND_STYLES,
   BADGE_NAME_FORMATS,
   BADGE_TYPES,
+  BANNER_DIRECTIONS,
   BANNER_STYLES,
   DEFAULT_DISPLAY_PREFS,
   NAME_ACCENTS,
@@ -105,6 +106,10 @@ import {
 } from "@/components/ui/accordion";
 import { AvatarFramePicker } from "@/components/studio/AvatarFramePicker";
 import { VERIFIED_STRUCTURE_MESSAGE } from "@/lib/verified-handle";
+import { strictHandleIssue, MSG_ALIAS_DIGITS, ALIAS_DIGITS_HINT } from "@/lib/handle-validation";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
+import { HandleErrorBanner } from "@/components/HandleValidationMessage";
 import { VerifiedHandleBuilder } from "@/components/settings/VerifiedHandleBuilder";
 import { FavoritesEditor } from "@/components/dashboard/FavoritesEditor";
 import { MAX_FAVORITES } from "@/lib/favorites";
@@ -120,6 +125,11 @@ import {
   getStudioProfile,
   saveStudioProfile,
 } from "@/lib/studio-profile.functions";
+import {
+  checkAliasHandle,
+  getAliasProfile,
+  saveAliasProfile,
+} from "@/lib/alias-profile.functions";
 import { SubdomainPanel } from "@/components/dashboard/SubdomainPanel";
 import { BadgesPanel } from "@/components/dashboard/BadgesPanel";
 import { SocialVerifyPanel } from "@/components/dashboard/SocialVerifyPanel";
@@ -205,18 +215,23 @@ function inputHint(kind: string): { prefix?: string; help: string } {
   }
 }
 
+export type ProfileVariant = "verified" | "alias";
+
 /**
  * ROUT Studio — the creator workspace for the public Profile Hub.
  * Four fixed tabs (links, design, analytics, settings) with a live mobile
  * preview alongside, fully decoupled from the QR generator.
  */
-export function ProfileEditor() {
+export function ProfileEditor({ variant = "verified" }: { variant?: ProfileVariant } = {}) {
   const { user } = useAuth();
   const { style: rawUrlStyle, save: saveUrlStylePref } = useUrlStyle();
 
-  const loadProfileEditor = useServerFn(getStudioProfile);
-  const checkHandle = useServerFn(checkStudioHandle);
-  const saveProfile = useServerFn(saveStudioProfile);
+  // Het aliasprofiel (`/u/<handle>`) en het rootprofiel zijn aparte records met
+  // eigen handle, thema en blokken; alleen de RPC-laag verschilt.
+  const alias = variant === "alias";
+  const loadProfileEditor = useServerFn(alias ? getAliasProfile : getStudioProfile);
+  const checkHandle = useServerFn(alias ? checkAliasHandle : checkStudioHandle);
+  const saveProfile = useServerFn(alias ? saveAliasProfile : saveStudioProfile);
   const loadAnalytics = useServerFn(getStudioAnalytics);
   const [tab, setTab] = useState<StudioTab>("links");
   const [loading, setLoading] = useState(true);
@@ -226,6 +241,8 @@ export function ProfileEditor() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const [handle, setHandle] = useState("");
   const [claimed, setClaimed] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
@@ -380,10 +397,16 @@ export function ProfileEditor() {
     legalName,
     identityMode: prefs.identityMode,
   };
+  // Strikte platformregels (tekens, lengte, systeemwoorden, alias-cijfers) —
+  // deze blokkeren het opslaan volledig.
+  const strictIssue = strictHandleIssue(handle, { alias });
   const handleProblem = normalized ? handleIssue(normalized, handleCtx) : null;
-  const handleOk = isValidHandle(normalized) && !reserved && !handleProblem;
+  const handleOk =
+    isValidHandle(normalized) && !reserved && !handleProblem && !strictIssue;
+  /** Een reeds opgeslagen handle die niet meer aan de richtlijnen voldoet. */
+  const storedHandleInvalid = claimed ? strictHandleIssue(claimed, { alias }) : null;
   // Volg de actieve identiteitsruimte; schone root-URLs blijven Pro-only.
-  const urlStyle = effectiveUrlStyle(
+  const urlStyle = alias ? "u" : effectiveUrlStyle(
     identitySpace === "verified" ? "clean" : rawUrlStyle === "clean" || rawUrlStyle === "clean_at" ? "u" : rawUrlStyle,
     verified,
   );
@@ -508,6 +531,10 @@ export function ProfileEditor() {
       return toast.error(result.reason ?? "Saving failed");
     }
     setClaimed(normalized);
+    // Handle direct live: publieke cache leegmaken zodat rout.be/<handle>
+    // meteen rendert zonder herlaad of serverherstart.
+    void queryClient.invalidateQueries({ queryKey: ["public-profile", normalized] });
+    void router.invalidate();
     setDirty(false);
     setSavedAt(Date.now());
     if (!silent) toast.success("Studio saved");
@@ -663,6 +690,9 @@ export function ProfileEditor() {
 
   return (
     <div className={cn("flex flex-1 flex-col space-y-4", showSaveBar && "pb-16 lg:pb-4")}>
+      {storedHandleInvalid && (
+        <HandleErrorBanner message="Je huidige gebruikersnaam voldoet niet aan de nieuwe richtlijnen. Kies een nieuwe geldige handle om je profiel online te houden." />
+      )}
       {/* Compacte studiokop: tier-balk en tabs blijven bij het scrollen staan en
           nemen samen nauwelijks hoogte in, zodat de live preview hoger begint. */}
       {/* RIJ 1 — profielstatus & URL-balk */}
@@ -1151,6 +1181,27 @@ export function ProfileEditor() {
                 </AccordionContent>
               </AccordionItem>
 
+              {/* Favorieten horen bij je links: film, serie, boek, muziek … */}
+              <AccordionItem
+                value="favorites"
+                className="rounded-2xl border border-border bg-card px-4 sm:px-5"
+              >
+                <AccordionTrigger className="hover:no-underline">
+                  <span className="flex flex-1 items-center justify-between gap-3 pr-2">
+                    <span className="text-base font-medium">⭐ Favorieten</span>
+                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
+                      {prefs.favorites.length}/{MAX_FAVORITES}
+                    </span>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-4 pb-5">
+                  <FavoritesEditor
+                    value={prefs.favorites}
+                    onChange={(next) => setPref("favorites", next)}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+
               <AccordionItem
                 value="conversion_tips"
                 className="rounded-2xl border border-border bg-card px-4 sm:px-5"
@@ -1535,28 +1586,63 @@ export function ProfileEditor() {
                     ))}
                   </div>
                   {prefs.bannerStyle === "gradient" && (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <p className="input-label">Van</p>
-                        <input
-                          type="color"
-                          aria-label="Bannerkleur van"
-                          value={prefs.bannerFrom ?? "#1a1a1a"}
-                          onChange={(e) => setPref("bannerFrom", e.target.value)}
-                          className="h-10 w-full cursor-pointer rounded-lg border border-border bg-transparent p-1"
-                        />
+                    <>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <p className="input-label">Van</p>
+                          <input
+                            type="color"
+                            aria-label="Bannerkleur van"
+                            value={prefs.bannerFrom ?? "#1a1a1a"}
+                            onChange={(e) => setPref("bannerFrom", e.target.value)}
+                            className="h-10 w-full cursor-pointer rounded-lg border border-border bg-transparent p-1"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="input-label">Naar</p>
+                          <input
+                            type="color"
+                            aria-label="Bannerkleur naar"
+                            value={prefs.bannerTo ?? "#c9a84c"}
+                            onChange={(e) => setPref("bannerTo", e.target.value)}
+                            className="h-10 w-full cursor-pointer rounded-lg border border-border bg-transparent p-1"
+                          />
+                        </div>
                       </div>
-                      <div className="space-y-1.5">
-                        <p className="input-label">Naar</p>
-                        <input
-                          type="color"
-                          aria-label="Bannerkleur naar"
-                          value={prefs.bannerTo ?? "#c9a84c"}
-                          onChange={(e) => setPref("bannerTo", e.target.value)}
-                          className="h-10 w-full cursor-pointer rounded-lg border border-border bg-transparent p-1"
-                        />
+                      <p className="input-label pt-2">Richting van het verloop</p>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {BANNER_DIRECTIONS.map((d) => {
+                          const from = prefs.bannerFrom ?? "#1a1a1a";
+                          const to = prefs.bannerTo ?? "#c9a84c";
+                          return (
+                            <button
+                              key={d.id}
+                              type="button"
+                              aria-pressed={prefs.bannerDirection === d.id}
+                              onClick={() => setPref("bannerDirection", d.id)}
+                              className={cn(
+                                "flex items-center gap-2 rounded-xl border p-2 text-left text-[11px] font-medium transition-colors",
+                                prefs.bannerDirection === d.id
+                                  ? "border-primary/50 bg-primary/10"
+                                  : "border-border",
+                              )}
+                            >
+                              <span
+                                aria-hidden
+                                className="h-7 w-10 shrink-0 rounded-md border border-border"
+                                style={{
+                                  backgroundImage:
+                                    d.id === "radial"
+                                      ? `radial-gradient(circle at 50% 50%, ${from}, ${to})`
+                                      : `linear-gradient(${d.id}, ${from}, ${to})`,
+                                }}
+                              />
+                              <span className="truncate">{d.label}</span>
+                            </button>
+                          );
+                        })}
                       </div>
-                    </div>
+                    </>
                   )}
                   {prefs.bannerStyle === "image" && (
                     <div className="space-y-1.5">
@@ -1570,27 +1656,6 @@ export function ProfileEditor() {
                       />
                     </div>
                   )}
-                </AccordionContent>
-              </AccordionItem>
-
-              {/* 5 — Favorieten: films, series & boeken */}
-              <AccordionItem
-                value="favorites"
-                className="rounded-2xl border border-border bg-card px-4 sm:px-5"
-              >
-                <AccordionTrigger className="hover:no-underline">
-                  <span className="flex flex-1 items-center justify-between gap-3 pr-2">
-                    <span className="text-base font-medium">⭐ Favorieten</span>
-                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
-                      {prefs.favorites.length}/{MAX_FAVORITES}
-                    </span>
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="space-y-4 pb-5">
-                  <FavoritesEditor
-                    value={prefs.favorites}
-                    onChange={(next) => setPref("favorites", next)}
-                  />
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
@@ -1675,6 +1740,60 @@ export function ProfileEditor() {
                   </div>
                 )}
               </div>
+
+              {/* Zelfde data als tabel — bij geen data toch één lege regel. */}
+              <div className="overflow-hidden rounded-xl border border-border">
+                <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                  <p className="text-xs font-medium text-muted-foreground">Traffic trend (tabel)</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {(series ?? []).reduce((sum, r) => sum + r.scans, 0)} totaal
+                  </p>
+                </div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <th className="px-3 py-2 text-left font-medium">Datum</th>
+                      <th className="px-3 py-2 text-right font-medium">Scans &amp; views</th>
+                      <th className="px-3 py-2 text-left font-medium">Verdeling</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(series ?? []).length === 0 ? (
+                      <tr>
+                        <td className="px-3 py-2.5 text-muted-foreground">—</td>
+                        <td className="px-3 py-2.5 text-right text-muted-foreground">0</td>
+                        <td className="px-3 py-2.5">
+                          <div className="h-1.5 w-full rounded-full bg-muted" />
+                        </td>
+                      </tr>
+                    ) : (
+                      (series ?? []).map((row) => {
+                        const peak = Math.max(1, ...(series ?? []).map((r) => r.scans));
+                        return (
+                          <tr key={row.date} className="border-t border-border/60">
+                            <td className="px-3 py-2 text-muted-foreground">{row.date}</td>
+                            <td className="px-3 py-2 text-right font-medium tabular-nums">
+                              {row.scans}
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className="h-full rounded-full bg-foreground"
+                                  style={{
+                                    width: `${row.scans === 0 ? 0 : Math.max(4, (row.scans / peak) * 100)}%`,
+                                  }}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+
 
               <div className="rounded-xl border border-border p-3">
                 <p className="mb-2 text-xs font-medium text-muted-foreground">
@@ -1776,9 +1895,22 @@ export function ProfileEditor() {
                 <AccordionContent className="space-y-4 pb-5">
               <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
 
-                <h2 className="text-lg font-medium">Handle & Identifier</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-medium">
+                    {alias
+                      ? "Privacy Alias (rout.be/u/[alias])"
+                      : "Geverifieerde Handle (rout.be/[handle])"}
+                  </h2>
+                  {alias && (
+                    <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      minimaal 2 cijfers
+                    </span>
+                  )}
+                </div>
                 <p id="handle-help" className="mt-1 text-xs text-muted-foreground">
-                  {handleRuleHint(handleCtx)}
+                  {alias
+                    ? "Kies vrij een pseudoniem. Enkel kleine letters, cijfers en . - _ — met minstens 2 cijfers."
+                    : handleRuleHint(handleCtx)}
                 </p>
                 <div className="mt-3 flex min-w-0 items-center gap-2">
                   <span className="shrink-0 font-mono text-sm text-muted-foreground">
@@ -1803,6 +1935,14 @@ export function ProfileEditor() {
                     className="input-field h-11 min-w-0 flex-1 rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-[invalid=true]:border-destructive"
                   />
                 </div>
+                {strictIssue && (
+                  <HandleErrorBanner
+                    message={
+                      alias && strictIssue === MSG_ALIAS_DIGITS ? ALIAS_DIGITS_HINT : strictIssue
+                    }
+                    className="mt-3"
+                  />
+                )}
                 {normalized && (
                   <p className="mt-2 break-all text-xs">
                     {!handleOk ? (
@@ -1822,7 +1962,7 @@ export function ProfileEditor() {
                     )}
                   </p>
                 )}
-                {verified && (
+                {verified && !alias && (
                   <div className="mt-4">
                     <VerifiedHandleBuilder
                       legalName={legalName}
@@ -2048,9 +2188,10 @@ export function ProfileEditor() {
         </div>
 
         
-        {/* Live preview — desktop: pinned next to the editor, altijd ónder de vaste header (z-10 < z-50) */}
-        <aside className="z-10 hidden self-start lg:sticky lg:top-20 lg:col-span-5 lg:block">
-          <div className="flex flex-col items-center justify-start rounded-3xl border border-border/80 bg-card/40 p-6 shadow-2xl">
+        {/* Live preview — desktop: volledig stationair naast de editor terwijl
+            de formulieren links scrollen (z-10 < vaste header z-50) */}
+        <aside className="z-10 hidden self-start lg:sticky lg:top-4 lg:col-span-5 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col lg:justify-between lg:py-2">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-start rounded-3xl border border-border/80 bg-card/40 p-6 shadow-2xl">
 
           <div className="mb-4 flex w-full items-center justify-between gap-2">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -2090,14 +2231,15 @@ export function ProfileEditor() {
 
           <div className="transition-all duration-300 ease-out">
           {previewDevice === "mobile" ? (
-            /* Smartphone: 9:19.5, ronde hoeken, dunne bezel en camera-eiland */
-            <div className="mx-auto w-full max-w-[290px] overflow-hidden rounded-[36px] border border-border/70 bg-foreground/90 p-[10px] shadow-[0_24px_60px_-20px_rgba(0,0,0,0.55)] transition-all duration-300">
+            /* Smartphone: 9:18, ronde hoeken, bezel en camera-eiland; gecentreerd
+               en begrensd op 580px hoog zodat hij in de sticky kolom past */
+            <div className="mx-auto flex max-h-[580px] w-full max-w-[290px] flex-1 items-stretch overflow-hidden rounded-[36px] border-[6px] border-zinc-800 bg-black shadow-2xl transition-all duration-300">
               <div className="relative w-full overflow-hidden rounded-[28px] bg-background">
-                <span className="absolute left-1/2 top-2 z-10 flex h-3 w-20 -translate-x-1/2 items-center justify-center gap-1 rounded-full bg-foreground/80">
+                <span className="absolute left-1/2 top-2 z-10 flex h-3 w-20 -translate-x-1/2 items-center justify-center gap-1 rounded-full bg-zinc-800">
                   <span className="h-1 w-8 rounded-full bg-background/25" />
                   <span className="h-1.5 w-1.5 rounded-full bg-background/35" />
                 </span>
-                <div className="preview-noscroll aspect-[9/19.5] w-full overflow-y-auto overflow-x-hidden text-foreground">
+                <div className="preview-noscroll aspect-[9/18] max-h-[560px] w-full overflow-y-auto overflow-x-hidden text-foreground">
                   <ProfileView profile={previewDraft} free={!verified} />
                 </div>
               </div>

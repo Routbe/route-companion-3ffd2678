@@ -36,7 +36,7 @@ function CleanProfile() {
 
 function HandleProfile({ username }: { username: string }) {
   const handle = canonicalHandle(username);
-  const { profile, suspended, loading, error, retry } = useProfileRecord(handle);
+  const { profile, suspended, loading, error, retry } = useProfileRecord(handle, { free: false });
 
   useEffect(() => {
     if (profile) document.title = `${profile.display_name || `@${profile.username}`} — ROUT`;

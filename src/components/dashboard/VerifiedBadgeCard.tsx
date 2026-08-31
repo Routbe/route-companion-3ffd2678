@@ -32,7 +32,7 @@ export function VerifiedBadgeCard({
       await navigator.clipboard.writeText(kind === "html" ? snippets.html : snippets.svg);
       setCopied(kind);
       toast.success("Gekopieerd naar je klembord.");
-      setTimeout(() => setCopied(null), 1800);
+      setTimeout(() => setCopied(null), 2000);
     } catch {
       toast.error("Kopiëren mislukt — selecteer de code handmatig.");
     }

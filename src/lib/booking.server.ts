@@ -5,7 +5,11 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { sql } from "@/lib/neon";
-import { sendMail } from "@/emails/send.server";
+import {
+  sendBookingRequestToHost,
+  sendBookingConfirmedToGuest,
+  sendBookingDeclinedToGuest,
+} from "@/lib/brevo/client";
 import {
   BOOKING_MESSAGE_MAX,
   buildIcs,
@@ -115,25 +119,16 @@ export async function createBookingRequest(
   const declineUrl = `${base}/api/public/bookings/${id}/decline?token=${bookingToken(id, "decline")}`;
 
   if (host.email) {
-    await sendMail({
+    await sendBookingRequestToHost({
       to: host.email,
-      subject: `Nieuwe afspraakaanvraag van ${input.guestName}`,
-      replyTo: { email: input.guestEmail, name: input.guestName },
-      html: `
-        <p>Je kreeg een nieuwe afspraakaanvraag via je ROUT-profiel.</p>
-        <ul>
-          <li><strong>Naam:</strong> ${escapeHtml(input.guestName)}</li>
-          <li><strong>E-mail:</strong> ${escapeHtml(input.guestEmail)}</li>
-          <li><strong>Datum:</strong> ${escapeHtml(input.preferredDate)} om ${escapeHtml(input.preferredTime)}</li>
-          <li><strong>Duur:</strong> ${host.config.duration} min</li>
-        </ul>
-        ${message ? `<p><strong>Bericht:</strong><br>${escapeHtml(message)}</p>` : ""}
-        <p>
-          <a href="${acceptUrl}">✅ Aanvaarden</a> &nbsp;·&nbsp;
-          <a href="${declineUrl}">❌ Weigeren</a>
-        </p>
-      `,
-      text: `Nieuwe afspraakaanvraag van ${input.guestName} (${input.guestEmail}) op ${input.preferredDate} ${input.preferredTime}.\nAanvaarden: ${acceptUrl}\nWeigeren: ${declineUrl}`,
+      guestName: input.guestName,
+      guestEmail: input.guestEmail,
+      date: input.preferredDate,
+      time: input.preferredTime,
+      durationMinutes: host.config.duration,
+      message,
+      acceptUrl,
+      declineUrl,
     });
   }
 
@@ -183,11 +178,12 @@ export async function resolveBookingRequest(
   const duration = Number(booking["duration_minutes"] ?? 30);
 
   if (action === "decline") {
-    await sendMail({
+    await sendBookingDeclinedToGuest({
       to: guestEmail,
-      subject: `Je afspraakaanvraag bij ${hostName}`,
-      html: `<p>Dag ${escapeHtml(guestName)},</p><p>${escapeHtml(hostName)} kan helaas niet op ${escapeHtml(date)} om ${escapeHtml(time)}. Je mag gerust een ander moment voorstellen.</p>`,
-      text: `Dag ${guestName}, ${hostName} kan helaas niet op ${date} om ${time}.`,
+      guestName,
+      hostName,
+      date,
+      time,
     });
     return { ok: true, message: "Aanvraag geweigerd. De gast is verwittigd." };
   }
@@ -215,22 +211,17 @@ export async function resolveBookingRequest(
     description: String(booking["guest_message"] ?? ""),
   });
 
-  await sendMail({
+  await sendBookingConfirmedToGuest({
     to: guestEmail,
-    subject: `Bevestigd: ${title} op ${date} om ${time}`,
-    replyTo: { email: hostEmail, name: hostName },
-    html: `
-      <p>Dag ${escapeHtml(guestName)},</p>
-      <p>${escapeHtml(hostName)} bevestigde je afspraak op <strong>${escapeHtml(date)} om ${escapeHtml(time)}</strong> (${duration} min).</p>
-      <p>
-        <a href="${gcal}">Toevoegen aan Google Calendar</a> — of open de bijgevoegde
-        <code>afspraak.ics</code> voor Apple Calendar en Outlook.
-      </p>
-    `,
-    text: `Bevestigd: ${title} op ${date} om ${time} (${duration} min). Google Calendar: ${gcal}`,
-    attachments: [
-      { name: "afspraak.ics", contentBase64: Buffer.from(ics, "utf8").toString("base64") },
-    ],
+    guestName,
+    hostName,
+    hostEmail,
+    title,
+    date,
+    time,
+    durationMinutes: duration,
+    calendarUrl: gcal,
+    ics,
   });
 
   return { ok: true, message: "Afspraak aanvaard. De gast kreeg een agenda-uitnodiging." };

@@ -1412,6 +1412,78 @@ export async function getAdminKpis(): Promise<AdminKpis> {
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * KPI drilldown — welke profielen zitten achter een getal?            *
+ * ------------------------------------------------------------------ */
+
+export type AdminKpiMetric =
+  | "activeUsers"
+  | "pendingVerifications"
+  | "incompletePayments"
+  | "pendingSepaPayments"
+  | "failedAliasSyncs";
+
+export type AdminKpiRow = {
+  userId: string;
+  username: string | null;
+  displayName: string | null;
+  detail: string | null;
+};
+
+/**
+ * Levert de profielen achter één KPI-getal, zodat een admin op de tegel kan
+ * klikken en meteen ziet om welke accounts het gaat.
+ */
+export async function getAdminKpiRows(
+  metric: AdminKpiMetric,
+  limit = 200,
+): Promise<AdminKpiRow[]> {
+  const { sql } = await import("@/lib/neon");
+  const cap = Math.min(500, Math.max(1, limit));
+  type Row = Record<string, unknown>;
+  let rows: Row[] = [];
+
+  if (metric === "activeUsers") {
+    rows = (await sql`
+      select id as user_id, username, display_name,
+             to_char(created_at, 'YYYY-MM-DD') as detail
+        from public.profiles
+       order by created_at desc
+       limit ${cap}
+    `) as Row[];
+  } else if (metric === "failedAliasSyncs") {
+    rows = (await sql`
+      select id as user_id, username, display_name,
+             coalesce(alias_sync_error, 'alias sync failed') as detail
+        from public.profiles
+       where alias_sync_status = 'failed'
+       order by created_at desc
+       limit ${cap}
+    `) as Row[];
+  } else {
+    const status = metric === "incompletePayments" ? "incomplete" : "pending";
+    const sepaOnly = metric === "pendingSepaPayments";
+    rows = (await sql`
+      select p.id as user_id, p.username, p.display_name,
+             concat_ws(' · ', v.provider, v.status,
+                       to_char(v.created_at, 'YYYY-MM-DD')) as detail
+        from public.verification_payments v
+        join public.profiles p on p.id = v.user_id
+       where v.status = ${status}
+         and (${sepaOnly} = false or v.provider = 'sepa')
+       order by v.created_at desc
+       limit ${cap}
+    `) as Row[];
+  }
+
+  return rows.map((r) => ({
+    userId: String(r["user_id"]),
+    username: (r["username"] as string | null) ?? null,
+    displayName: (r["display_name"] as string | null) ?? null,
+    detail: (r["detail"] as string | null) ?? null,
+  }));
+}
+
 
 /* ------------------------------------------------------------------ *
  * SEPA reference auto-parsing                                         *

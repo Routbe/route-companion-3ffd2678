@@ -17,7 +17,7 @@ function FreeProfile() {
   const { username } = useParams({ strict: false }) as { username: string };
   // Normalise: strip a leading @ so /u/john and /u/@john resolve identically.
   const handle = username.replace(/^@/, "").toLowerCase();
-  const { profile, suspended, loading, error, retry } = useProfileRecord(handle);
+  const { profile, suspended, loading, error, retry } = useProfileRecord(handle, { free: true });
 
   useEffect(() => {
     if (profile) document.title = `${profile.display_name || `@${profile.username}`} — ROUT`;

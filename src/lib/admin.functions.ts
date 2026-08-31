@@ -182,6 +182,29 @@ export const getSystemHealth = createServerFn({ method: "GET" })
     return getAdminKpis();
   });
 
+/** De profielen achter één KPI-tegel, zodat de admin kan doorklikken. */
+export const getSystemHealthRows = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        metric: z.enum([
+          "activeUsers",
+          "pendingVerifications",
+          "incompletePayments",
+          "pendingSepaPayments",
+          "failedAliasSyncs",
+        ]),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { assertAdminRole } = await import("./admin.server");
+    await assertAdminRole(context.userId);
+    const { getAdminKpiRows } = await import("./admin-moderation.server");
+    return getAdminKpiRows(data.metric);
+  });
+
 /** Bulk-grant the VIP short-handle allowance to the selected accounts. */
 export const bulkGrantVipToUsers = createServerFn({ method: "POST" })
   .middleware([requireAuth])

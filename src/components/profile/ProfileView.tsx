@@ -29,6 +29,7 @@ import { BadgeShowcase } from "@/components/profile/BadgeShowcase";
 import { VerifiedInfoDialog } from "@/components/profile/VerifiedInfoDialog";
 import { monthYear } from "@/components/profile/VerifiedBadgePopover";
 import { ProfileBadge } from "@/components/profile/ProfileBadge";
+import { EarlyBelieverBadge } from "@/components/profile/EarlyBelieverBadge";
 import {
   backgroundLayers,
   bannerStyleOf,
@@ -234,14 +235,11 @@ export function ProfileView({
         </h1>
 
         {earlyBeliever && (
-          <button
-            type="button"
+          <EarlyBelieverBadge
             onClick={() => setShowVerifyInfo(true)}
-            className="mt-2 inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold uppercase tracking-widest transition-opacity hover:opacity-80"
-            style={{ border: `1px solid ${t.border}`, color: t.text }}
-          >
-            <BadgeCheck className="h-3 w-3" aria-hidden /> Early Believer
-          </button>
+            borderColor={t.border}
+            textColor={t.text}
+          />
         )}
 
         <VerifiedInfoDialog

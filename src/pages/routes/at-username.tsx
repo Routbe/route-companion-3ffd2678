@@ -15,7 +15,7 @@ import { useProfileRecord } from "@/hooks/useProfileRecord";
 
 function PublicProfile() {
   const { username } = useParams({ strict: false }) as { username: string };
-  const { profile, suspended, loading, error, retry } = useProfileRecord(username);
+  const { profile, suspended, loading, error, retry } = useProfileRecord(username, { free: false });
 
   useEffect(() => {
     if (profile) document.title = `${profile.display_name || `@${profile.username}`} — ROUT`;

@@ -6,6 +6,7 @@
  * mee. Alleen geverifieerde/betalende leden kunnen steun ontvangen.
  */
 import { sql } from "@/lib/neon";
+import { sendDonationReceipt } from "@/lib/brevo/client";
 
 type Row = Record<string, unknown>;
 
@@ -172,13 +173,27 @@ export async function markDonation(
   status: "paid" | "failed" | "expired" | "processing",
   sessionId: string | null,
 ): Promise<void> {
-  await sql`
+  const updated = (await sql`
     update public.creator_donations
        set status = ${status},
            session_id = coalesce(${sessionId}, session_id),
            paid_at = case when ${status} = 'paid' then now() else paid_at end
      where id = ${donationId}
-  `;
+     returning handle, amount_cents, message, supporter_name, supporter_email
+  `) as Row[];
+
+  // Ontvangstbewijs naar de supporter zodra de betaling rond is.
+  const row = updated[0];
+  const supporterEmail = (row?.["supporter_email"] as string | null) ?? null;
+  if (status === "paid" && supporterEmail) {
+    await sendDonationReceipt({
+      to: supporterEmail,
+      supporterName: (row?.["supporter_name"] as string | null) ?? null,
+      creatorHandle: String(row?.["handle"] ?? ""),
+      amountCents: Number(row?.["amount_cents"] ?? 0),
+      message: (row?.["message"] as string | null) ?? null,
+    }).catch(() => undefined);
+  }
 }
 
 export type DonationStatus = {

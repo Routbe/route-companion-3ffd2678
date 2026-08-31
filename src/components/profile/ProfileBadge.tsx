@@ -1,5 +1,6 @@
 import { BadgeCheck } from "lucide-react";
 import { HumanLinkedIcon } from "@/components/profile/HumanLinkedIcon";
+import { PrivacyShieldBadge } from "@/components/profile/PrivacyShieldBadge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { monthYear } from "@/components/profile/VerifiedBadgePopover";
 import { useI18n } from "@/lib/i18n";
@@ -39,6 +40,11 @@ export function ProfileBadge({
   const { t, locale } = useI18n();
   const on = monthYear(verifiedAt, locale || "nl");
   const human = type === "human";
+  // Alias-profielen (`rout.be/u/…`) tonen het privacy-schild met donkere
+  // glassmorphic tooltip — nooit het blauwe vinkje.
+  if (human) {
+    return <PrivacyShieldBadge size={size} />;
+  }
   const Icon = human ? HumanLinkedIcon : BadgeCheck;
   const iconClass = `${size === "md" ? "h-6 w-6" : "h-5 w-5"} ${
     human ? "opacity-80" : "text-[#1d9bf0]"

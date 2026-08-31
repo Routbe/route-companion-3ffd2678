@@ -190,7 +190,7 @@ export async function isHandleFree(rawHandle: string, userId: string | null) {
   if (!username) return { ok: false, reason: "invalid" as const };
   if (isReservedHandle(username)) return { ok: false, reason: "reserved" as const };
   const rows = (await sql`
-    select id from public.profiles where username = ${username} limit 1
+    select id from public.profiles where lower(username) = ${username} limit 1
   `) as Row[];
   const owner = rows[0]?.["id"] as string | undefined;
   if (!owner || (userId && owner === userId)) return { ok: true, reason: null };
@@ -209,7 +209,10 @@ export async function readPublicProfile(rawHandle: string) {
            coalesce(total_reach_count, 0) as total_reach_count,
            to_jsonb(profiles) -> 'display_prefs' as display_prefs
       from public.profiles
-     where username = ${username} and coalesce(is_banned, false) = false
+     where (lower(username) = ${username}
+            or lower(coalesce(subdomain_alias, '')) = ${username})
+       and coalesce(is_banned, false) = false
+     order by (lower(username) = ${username}) desc
      limit 1
   `) as Row[];
   const profile = rows[0];
